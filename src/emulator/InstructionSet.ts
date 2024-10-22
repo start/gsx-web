@@ -1,6 +1,7 @@
 import {Gsx} from './Gsx.ts'
 import {GeneralPurposeRegisterName} from './Registers.ts'
 import {UINT32_MAX} from './DataTypeConstants.ts'
+import {getFloatBytes} from '../helpers/getFloatBytes.ts'
 
 
 export function runInstruction(instructionBytecode: number, gsx: Gsx, programBytecode: DataView): void {
@@ -143,9 +144,9 @@ type Instruction = (gsx: Gsx, programBytecode: DataView) => void;
   For float assignment, the constant value is the four bytes
   comprising the float:
 
-    new t = 0.12        # Full bytecode: [3] [ 61, 245, 194, 143]
-    new r = -3.1415927  # Full bytecode: [4] [192,  73,  15, 219]
-    new y = 60000       # Full bytecode: [5] [ 71, 106,  96,   0]
+    new t = 0.12        # Full bytecode: [3] [ 61, -11, -62, -113]
+    new r = -3.1415927  # Full bytecode: [4] [-64,  73,  15,  -37]
+    new y = 60000       # Full bytecode: [5] [ 71, 106,  96,    0]
 
   Thus, assigning a byte constant takes a total of two bytes of
   bytecode; assigning a float constant takes a total of five.
@@ -438,17 +439,3 @@ function normalizeMnemonic(text: string): string {
 // than the maximum allowed program size. (Plus, it's the largest
 // value we can store in the 32-bit program counter register.)
 const PROGRAM_COUNTER_EXIT = UINT32_MAX
-
-
-const dataView = new DataView(new ArrayBuffer(4))
-
-export function getFloatBytes(value: number): [number, number, number, number] {
-  dataView.setFloat32(0, value)
-
-  return [
-    dataView.getInt8(0),
-    dataView.getInt8(1),
-    dataView.getInt8(2),
-    dataView.getInt8(3)
-  ]
-}

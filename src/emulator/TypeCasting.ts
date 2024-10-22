@@ -1,5 +1,6 @@
 import {UINT32_MAX} from './DataTypeConstants.ts'
 
+
 export function toUint8(value: number): number {
   return integerSaturate(value, 0, 255)
 }

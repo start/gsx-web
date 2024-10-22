@@ -1,0 +1,14 @@
+#grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+#errors ul {
+    font-family: monospace;
+    text-align: left;
+}
+
+textarea {
+    font-family: 'Comic Sans MS', 'Comic Neue', cursive, sans-serif;
+}

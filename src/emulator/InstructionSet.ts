@@ -171,7 +171,6 @@ const instructionByBytecode: Instruction[] = [
   // a register equal to that float.
   ...generalPurposeRegisters.map(register =>
     (gsx: Gsx, programBytecode: DataView) => {
-      // Advance the program counter to the float we'll read.
       gsx.registers.set(
         register,
         programBytecode.getFloat32(gsx.registers.programCounter))
@@ -414,6 +413,57 @@ for (const register of generalPurposeRegisters) {
           gsx.registers.get(register) * gsx.registers.get(otherRegister))
       })
     }
+  }
+
+
+  /*
+    Subtraction
+  */
+
+  // Set a register equal to the difference of the other two registers.
+  for (const register of generalPurposeRegisters) {
+    const [other1, other2] = otherTwo(register)
+
+    define(assign({to: register, from: `${other1} - ${other2}`}), (gsx: Gsx) => {
+      gsx.registers.set(
+        register,
+        gsx.registers.get(other1) - gsx.registers.get(other2))
+    })
+
+    define(assign({to: register, from: `${other2} - ${other1}`}), (gsx: Gsx) => {
+      gsx.registers.set(
+        register,
+        gsx.registers.get(other2) - gsx.registers.get(other1))
+    })
+  }
+
+  // Set a register equal to the difference of itself and another register.
+  for (const register of generalPurposeRegisters) {
+    const [other1, other2] = otherTwo(register)
+
+    define(assign({to: register, from: `${register} - ${other1}`}), (gsx: Gsx) => {
+      gsx.registers.set(
+        register,
+        gsx.registers.get(register) - gsx.registers.get(other1))
+    })
+
+    define(assign({to: register, from: `${register} - ${other2}`}), (gsx: Gsx) => {
+      gsx.registers.set(
+        register,
+        gsx.registers.get(register) - gsx.registers.get(other2))
+    })
+
+    define(assign({to: register, from: `${other1} - ${register}`}), (gsx: Gsx) => {
+      gsx.registers.set(
+        register,
+        gsx.registers.get(other1) - gsx.registers.get(register))
+    })
+
+    define(assign({to: register, from: `${other2} - ${register}`}), (gsx: Gsx) => {
+      gsx.registers.set(
+        register,
+        gsx.registers.get(other2) - gsx.registers.get(register))
+    })
   }
 }
 

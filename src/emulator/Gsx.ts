@@ -20,6 +20,7 @@ export class Gsx {
     while (this.registers.programCounter < program.byteLength) {
       const instructionBytecode = program.getUint8(this.registers.programCounter)
       this.registers.programCounter += 1
+
       runInstruction(instructionBytecode, this, program)
     }
   }

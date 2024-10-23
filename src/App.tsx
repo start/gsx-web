@@ -28,7 +28,6 @@ function App() {
   const bytecodeAsHex = renderDataViewAsHex(bytecode)
 
   const debouncedUpdateProgramInState = debounce((event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    console.log('debouncedUpdateProgramInState', {eventTargetValue: event.target.value})
     const program = event.target.value
     setState(getState(gsx, program))
   }, 300)
@@ -43,8 +42,7 @@ function App() {
     <>
       <header>
         <p>
-          This page contains a non-graphical emulator for an early-90s family computer,
-          the GSX.
+          This page contains a non-graphical emulator for an early-90s family computer, the GSX.
         </p>
 
         <p>

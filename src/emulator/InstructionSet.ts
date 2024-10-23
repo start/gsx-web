@@ -52,7 +52,8 @@ export function runInstruction(instructionBytecode: number, gsx: Gsx, programByt
  *
  * @param {string} program - The assembly program as a multi-line string.
  * @returns {[DataView, string[]]} - A DataView containing the bytecode of the
- * program, and an array of syntax errors encountered during translation.
+ * program, and an array of syntax errors encountered during translation. If
+ * there are any syntax errors, the bytecode DataView will be empty.
  */
 export function translateToBytecode(program: string): [DataView, string[]] {
   const programLines = program.split('\n')
@@ -581,17 +582,21 @@ for (const register of generalPurposeRegisters) {
 }
 
 
+/**
+ * Produce a mnemonic representing assignment.
+ *
+ * @param args - The assignment's destination and source.
+ */
 function assign(args: { to: string, from: string }): string {
   return `new ${args.to} = ${args.from}`
 }
 
-
+/**
+ * Normalize spacing, normalize capitalization, and remove comments.
+ *
+ * @param {string} mnemonic - The input string to be normalized.
+ */
 function normalizeMnemonic(mnemonic: string): string {
-  /**
-   * Normalize spacing, normalize capitalization, and remove comments.
-   *
-   * @param {string} mnemonic - The input string to be normalized.
-   */
   return mnemonic
     // This removes all whitespace and comments
     .replace(/\s+|#.*/g, '')
@@ -604,7 +609,7 @@ function normalizeMnemonic(mnemonic: string): string {
 // execution.
 //
 // To specifically indicate our program should exit, we set the
-// program counter to `DataTypeConstants, which is dramatically larger
+// program counter to `UINT32_MAX`, which is dramatically larger
 // than the maximum allowed program size. (Plus, it's the largest
 // value we can store in the 32-bit program counter register.)
 const PROGRAM_COUNTER_EXIT = UINT32_MAX

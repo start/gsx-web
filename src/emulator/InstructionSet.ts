@@ -1,6 +1,6 @@
 import {Gsx} from './Gsx.ts'
 import {GeneralPurposeRegisterName} from './Registers.ts'
-import {UINT32_MAX} from './DataTypeConstants.ts'
+import {INT8_MAX, INT8_MIN, UINT32_MAX} from './DataTypeConstants.ts'
 import {getFloatBytes} from '../helpers/getFloatBytes.ts'
 
 /*
@@ -37,12 +37,15 @@ const bytecodeByKeyableMnemonic: Record<string, number | undefined> = {}
 /**
  * Run a single bytecode instruction.
  *
- * @param {number} instructionBytecode - The bytecode of the instruction to run.
- * @param {Gsx} gsx - The state of the registers and RAM.
- * @param {DataView} programBytecode - The bytecode of the entire program.
- * @returns {void}
+ * @param instructionBytecode - The bytecode of the instruction to run.
+ * @param gsx - The state of the registers and RAM.
+ * @param programBytecode - The bytecode of the entire program.
  */
-export function runInstruction(instructionBytecode: number, gsx: Gsx, programBytecode: DataView): void {
+export function runInstruction(
+  instructionBytecode: number,
+  gsx: Gsx,
+  programBytecode: DataView
+): void {
   instructionByBytecode[instructionBytecode](gsx, programBytecode)
 }
 
@@ -61,18 +64,18 @@ export function translateToBytecode(program: string): [DataView, string[]] {
 
   // Because some instructions produce more than a single byte of
   // bytecode, we don't know ahead of time how many bytes we'll
-  // need!
+  // need.
   //
-  // That's why we use a regular growable array rather than a
+  // That's why we use a regular "growable" array rather than a
   // `Uint8Array`.
   //
   // (Once we're done, we convert this array into a `Uint8Array`
   // and wrap it in a `DataView`.)
-  const programBytes: number[] = new Array<number>(programLines.length)
+  const programBytes: number[] = []
 
 
-  // We need the index to report line numbers for any syntax
-  // errors.
+  // (We need the index to report line numbers for any syntax
+  // errors.)
   for (const [lineIndex, line] of programLines.entries()) {
     const normalizedMnemonic = normalizeMnemonic(line)
 
@@ -129,7 +132,7 @@ function tryToGetBytecodeForAssigningConstantToRegister(normalizedMnemonic: stri
   const constant = parseFloat(constantAsString)
 
   const isConstantAByte =
-    (constant >= -128) && (constant <= 127) &&
+    (constant >= INT8_MIN) && (constant <= INT8_MAX) &&
     constant === parseInt(constantAsString, 10)
 
   if (isConstantAByte) {
@@ -218,50 +221,61 @@ const instructionByBytecode: Instruction[] = []
 // Read the next byte of program bytecode, then set a register equal
 // to that byte.
 //
-// (We discussed these three instructions above.)
+// (We discussed these three instructions just above.)
 for (const register of generalPurposeRegisters) {
   instructionByBytecode.push(
     (gsx: Gsx, programBytecode: DataView) => {
       gsx.registers.set(
         register,
-        programBytecode.getUint32(gsx.registers.programCounter))
+        programBytecode.getInt8(gsx.registers.programCounter))
 
-      gsx.registers.programCounter += 4
+      // Advance the program counter past the byte we just read.
+      gsx.registers.programCounter += 1
     })
 }
 
 // Read the next four bytes of program bytecode as a float, then set
 // a register equal to that float.
 //
-// (We discussed these three instructions above, too.)
+// (We discussed these three instructions just above, too.)
 for (const register of generalPurposeRegisters) {
   instructionByBytecode.push(
     (gsx: Gsx, programBytecode: DataView) => {
       gsx.registers.set(
         register,
-        programBytecode.getUint32(gsx.registers.programCounter))
+        programBytecode.getFloat32(gsx.registers.programCounter))
 
+      // Advance the program counter past the float we just read.
       gsx.registers.programCounter += 4
     })
 }
 
-// The rest of our instructions
 
-// TODO: Summarize rest of instructions
+// The rest of our instructions have "keyable" mnemonics, and they
+// all produce just a single byte of bytecode.
 
-/*
-    new t = t * r
-    new ram[y] float = t
-    exit
+/**
+ * Define a new assembly instruction with corresponding mnemonics.
+ *
+ * @param mnemonicOrMnemonics - The mnemonic (or mnemonics) representing the assembly instruction.
+ * @param instruction - The function implementing the instruction.
  */
+function define(mnemonicOrMnemonics: string | string[], instruction: Instruction) {
+  const mnemonics = Array.isArray(mnemonicOrMnemonics)
+    ? mnemonicOrMnemonics
+    : [mnemonicOrMnemonics]
 
+  const normalizedMnemonics = mnemonics.map(normalizeMnemonic)
 
+  // If `instructionByBytecode` has a length of 6 when this function
+  // is called, then we've already defined bytecodes 0–5. Thus, the
+  // next bytecode is 6.
+  const bytecode = instructionByBytecode.length
 
-function define(mnemonic: string, instruction: Instruction) {
-  const normalizedMnemonic = normalizeMnemonic(mnemonic)
-  const nextBytecode = instructionByBytecode.length
+  for (const mnemonic of normalizedMnemonics) {
+    bytecodeByKeyableMnemonic[mnemonic] = bytecode
+  }
 
-  bytecodeByKeyableMnemonic[normalizedMnemonic] = nextBytecode
   instructionByBytecode.push(instruction)
 }
 
@@ -314,14 +328,12 @@ for (const register of generalPurposeRegisters) {
 
 // Set a register equal to zero.
 for (const register of generalPurposeRegisters) {
-  for (const mnemonic of [
+  define([
     assign({to: register, from: '0'}),
     assign({to: register, from: '0.0'})
-  ]) {
-    define(mnemonic, (gsx: Gsx) => {
-      gsx.registers.set(register, 0)
-    })
-  }
+  ], (gsx: Gsx) => {
+    gsx.registers.set(register, 0)
+  })
 
 }
 
@@ -387,45 +399,39 @@ for (const addressRegister of generalPurposeRegisters) {
 for (const register of generalPurposeRegisters) {
   const [other1, other2] = otherTwo(register)
 
-  for (const mnemonic of [
+  define([
     assign({to: register, from: `${other1} + ${other2}`}),
     assign({to: register, from: `${other2} + ${other1}`})
-  ]) {
-    define(mnemonic, (gsx: Gsx) => {
-      gsx.registers.set(
-        register,
-        gsx.registers.get(other1) + gsx.registers.get(other2))
-    })
-  }
+  ], (gsx: Gsx) => {
+    gsx.registers.set(
+      register,
+      gsx.registers.get(other1) + gsx.registers.get(other2))
+  })
 }
 
 // Set a register equal to double its own value.
 for (const register of generalPurposeRegisters) {
-  for (const mnemonic of [
+  define([
     assign({to: register, from: `${register} + ${register}`}),
     assign({to: register, from: `2 * ${register}`}),
     assign({to: register, from: `${register} * 2`})
-  ]) {
-    define(mnemonic, (gsx: Gsx) => {
-      const oldValue = gsx.registers.get(register)
-      gsx.registers.set(register, oldValue + oldValue)
-    })
-  }
+  ], (gsx: Gsx) => {
+    const oldValue = gsx.registers.get(register)
+    gsx.registers.set(register, oldValue + oldValue)
+  })
 }
 
 // Set a register equal to itself plus another register.
 for (const register of generalPurposeRegisters) {
   for (const otherRegister of otherTwo(register)) {
-    for (const mnemonic of [
+    define([
       assign({to: register, from: `${register} + ${otherRegister}`}),
       assign({to: register, from: `${otherRegister} + ${register}`})
-    ]) {
-      define(mnemonic, (gsx: Gsx) => {
-        gsx.registers.set(
-          register,
-          gsx.registers.get(register) + gsx.registers.get(otherRegister))
-      })
-    }
+    ], (gsx: Gsx) => {
+      gsx.registers.set(
+        register,
+        gsx.registers.get(register) + gsx.registers.get(otherRegister))
+    })
   }
 }
 
@@ -438,44 +444,38 @@ for (const register of generalPurposeRegisters) {
 for (const register of generalPurposeRegisters) {
   const [other1, other2] = otherTwo(register)
 
-  for (const mnemonic of [
+  define([
     assign({to: register, from: `${other1} * ${other2}`}),
     assign({to: register, from: `${other2} * ${other1}`})
-  ]) {
-    define(mnemonic, (gsx: Gsx) => {
-      gsx.registers.set(
-        register,
-        gsx.registers.get(other1) * gsx.registers.get(other2))
-    })
-  }
+  ], (gsx: Gsx) => {
+    gsx.registers.set(
+      register,
+      gsx.registers.get(other1) * gsx.registers.get(other2))
+  })
 }
 
 // Set a register equal to the square of its own value.
 for (const register of generalPurposeRegisters) {
-  for (const mnemonic of [
+  define([
     assign({to: register, from: `${register} * ${register}`}),
     assign({to: register, from: `${register}^2`})
-  ]) {
-    define(mnemonic, (gsx: Gsx) => {
-      const oldValue = gsx.registers.get(register)
-      gsx.registers.set(register, oldValue * oldValue)
-    })
-  }
+  ], (gsx: Gsx) => {
+    const oldValue = gsx.registers.get(register)
+    gsx.registers.set(register, oldValue * oldValue)
+  })
 }
 
 // Set a register equal to itself times another register.
 for (const register of generalPurposeRegisters) {
   for (const otherRegister of otherTwo(register)) {
-    for (const mnemonic of [
+    define([
       assign({to: register, from: `${register} * ${otherRegister}`}),
       assign({to: register, from: `${otherRegister} * ${register}`})
-    ]) {
-      define(mnemonic, (gsx: Gsx) => {
-        gsx.registers.set(
-          register,
-          gsx.registers.get(register) * gsx.registers.get(otherRegister))
-      })
-    }
+    ], (gsx: Gsx) => {
+      gsx.registers.set(
+        register,
+        gsx.registers.get(register) * gsx.registers.get(otherRegister))
+    })
   }
 
 
@@ -594,7 +594,7 @@ function assign(args: { to: string, from: string }): string {
 /**
  * Normalize spacing, normalize capitalization, and remove comments.
  *
- * @param {string} mnemonic - The input string to be normalized.
+ * @param mnemonic - The input string to be normalized.
  */
 function normalizeMnemonic(mnemonic: string): string {
   return mnemonic

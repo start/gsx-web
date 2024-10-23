@@ -3,37 +3,96 @@ import {GeneralPurposeRegisterName} from './Registers.ts'
 import {UINT32_MAX} from './DataTypeConstants.ts'
 import {getFloatBytes} from '../helpers/getFloatBytes.ts'
 
+/*
+  This dictionary's key is the mnemonic; the value is the bytecode.
 
+  Here, the word "keyable" simply means these mnemonics can be used
+  as keys in a dictionary. In other words, we can take the mnemonic
+  as the user typed it, normalize its spacing and capitalization,
+  then plug it into this simple dictionary to find its corresponding
+  bytecode.
+
+  No real parsing is necessary!
+
+  Of our 256 instructions, 250 are keyable. Keyable instructions
+  include the following:
+
+    exit
+    push t
+    new t = r - y
+    call y
+
+  In contrast ,the six non-keyable mnemonics are described in a
+  large comment later in this file. All six involve assigning an
+  arbitrary numeric constant to a register, and all six produce
+  more than a single byte of bytecode.
+
+  (We have specific, single-byte mnemonics for assigning 0 to a
+  register. However, all other constant assignments must use the
+  non-keyable six mnemonics.)
+*/
+const bytecodeByKeyableMnemonic: Record<string, number | undefined> = {}
+
+
+/**
+ * Run a single bytecode instruction.
+ *
+ * @param {number} instructionBytecode - The bytecode of the instruction to run.
+ * @param {Gsx} gsx - The state of the registers and RAM.
+ * @param {DataView} programBytecode - The bytecode of the entire program.
+ * @returns {void}
+ */
 export function runInstruction(instructionBytecode: number, gsx: Gsx, programBytecode: DataView): void {
   instructionByBytecode[instructionBytecode](gsx, programBytecode)
 }
 
+
+/**
+ * Translates an assembly program into bytecode.
+ *
+ * @param {string} program - The assembly program as a multi-line string.
+ * @returns {[DataView, string[]]} - A DataView containing the bytecode of the
+ * program, and an array of syntax errors encountered during translation.
+ */
 export function translateToBytecode(program: string): [DataView, string[]] {
+  const programLines = program.split('\n')
   const syntaxErrors: string[] = []
-  const programBytes: number[] = []
 
-  const lines = program.split('\n')
+  // Because some instructions produce more than a single byte of
+  // bytecode, we don't know ahead of time how many bytes we'll
+  // need!
+  //
+  // That's why we use a regular growable array rather than a
+  // `Uint8Array`.
+  //
+  // (Once we're done, we convert this array into a `Uint8Array`
+  // and wrap it in a `DataView`.)
+  const programBytes: number[] = new Array<number>(programLines.length)
 
-  for (const [lineIndex, line] of lines.entries()) {
+
+  // We need the index to report line numbers for any syntax
+  // errors.
+  for (const [lineIndex, line] of programLines.entries()) {
     const normalizedMnemonic = normalizeMnemonic(line)
 
+    // Skip blank lines.
     if (!normalizedMnemonic.length) {
       continue
     }
 
-    const bytecode = bytecodeByMnemonic[normalizedMnemonic]
-    const isMnemonicRecognized = (bytecode !== undefined)
+    const possibleBytecode = bytecodeByKeyableMnemonic[normalizedMnemonic]
+    const wasMnemonicRecognized = (possibleBytecode !== undefined)
 
-    if (isMnemonicRecognized) {
+    if (wasMnemonicRecognized) {
+      // We only produce bytecode for programs without any syntax
+      // errors.
       if (syntaxErrors.length === 0) {
-        // We only produce bytecode for programs without any syntax errors.
-        programBytes.push(bytecode)
+        programBytes.push(possibleBytecode)
       }
 
+      // Either way, we're finished with this line!
       continue
     }
-
-    // TODO: Explain
 
     const bytecodeForAssigningConstantToRegister =
       tryToGetBytecodeForAssigningConstantToRegister(normalizedMnemonic)
@@ -109,7 +168,7 @@ function otherTwo(register: GeneralPurposeRegisterName) {
 
 
 type Instruction = (gsx: Gsx, programBytecode: DataView) => void;
-
+const instructionByBytecode: Instruction[] = []
 /*
   By the end of this file, the `instructionByBytecode` array will
   contain all 256 executable instructions from our assembly language.
@@ -155,36 +214,37 @@ type Instruction = (gsx: Gsx, programBytecode: DataView) => void;
   byte of bytecode each.)
  */
 
-const instructionByBytecode: Instruction[] = [
-  // Read the next byte of program bytecode, then set a register equal
-  // to that byte.
-  ...generalPurposeRegisters.map(register =>
+// Read the next byte of program bytecode, then set a register equal
+// to that byte.
+//
+// (We discussed these three instructions above.)
+for (const register of generalPurposeRegisters) {
+  instructionByBytecode.push(
     (gsx: Gsx, programBytecode: DataView) => {
       gsx.registers.set(
         register,
-        programBytecode.getInt8(gsx.registers.programCounter))
+        programBytecode.getUint32(gsx.registers.programCounter))
 
-      gsx.registers.programCounter += 1
-    }),
-
-  // Read the next four bytes of program bytecode as a float, then set
-  // a register equal to that float.
-  ...generalPurposeRegisters.map(register =>
-    (gsx: Gsx, programBytecode: DataView) => {
-      gsx.registers.set(
-        register,
-        programBytecode.getFloat32(gsx.registers.programCounter))
-
-      // Each float is four bytes wide, so we need to advance our
-      // program counter by a total of four to allow the next
-      // instruction to be read from the correct spot in the program
-      // bytecode.
-      //
-      // (We already advanced the program counter by one; here, we
-      // advanced it by another three.)
       gsx.registers.programCounter += 4
     })
-]
+}
+
+// Read the next four bytes of program bytecode as a float, then set
+// a register equal to that float.
+//
+// (We discussed these three instructions above, too.)
+for (const register of generalPurposeRegisters) {
+  instructionByBytecode.push(
+    (gsx: Gsx, programBytecode: DataView) => {
+      gsx.registers.set(
+        register,
+        programBytecode.getUint32(gsx.registers.programCounter))
+
+      gsx.registers.programCounter += 4
+    })
+}
+
+// The rest of our instructions
 
 // TODO: Summarize rest of instructions
 
@@ -195,14 +255,12 @@ const instructionByBytecode: Instruction[] = [
  */
 
 
-// The key is the mnemonic; the value is the bytecode.
-const bytecodeByMnemonic: Record<string, number | undefined> = {}
 
 function define(mnemonic: string, instruction: Instruction) {
   const normalizedMnemonic = normalizeMnemonic(mnemonic)
   const nextBytecode = instructionByBytecode.length
 
-  bytecodeByMnemonic[normalizedMnemonic] = nextBytecode
+  bytecodeByKeyableMnemonic[normalizedMnemonic] = nextBytecode
   instructionByBytecode.push(instruction)
 }
 
@@ -255,10 +313,15 @@ for (const register of generalPurposeRegisters) {
 
 // Set a register equal to zero.
 for (const register of generalPurposeRegisters) {
-  define(assign({to: register, from: '0'}),
-    (gsx: Gsx) => {
+  for (const mnemonic of [
+    assign({to: register, from: '0'}),
+    assign({to: register, from: '0.0'})
+  ]) {
+    define(mnemonic, (gsx: Gsx) => {
       gsx.registers.set(register, 0)
     })
+  }
+
 }
 
 
@@ -271,7 +334,6 @@ for (const addressRegister of generalPurposeRegisters) {
   for (const valueRegister of generalPurposeRegisters) {
     define(assign({to: valueRegister, from: `ram[${addressRegister}] byte`}),
       (gsx: Gsx) => {
-        console.log({valueRegister, addressRegister})
         const address = gsx.registers.get(addressRegister)
         const byteFromRam = gsx.ram.getInt8(address)
         gsx.registers.set(valueRegister, byteFromRam)
@@ -523,8 +585,14 @@ function assign(args: { to: string, from: string }): string {
   return `new ${args.to} = ${args.from}`
 }
 
-function normalizeMnemonic(text: string): string {
-  return text
+
+function normalizeMnemonic(mnemonic: string): string {
+  /**
+   * Normalize spacing, normalize capitalization, and remove comments.
+   *
+   * @param {string} mnemonic - The input string to be normalized.
+   */
+  return mnemonic
     // This removes all whitespace and comments
     .replace(/\s+|#.*/g, '')
     .toLowerCase()

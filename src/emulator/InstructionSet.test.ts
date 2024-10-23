@@ -30,12 +30,17 @@ describe('exit', () => {
   })
 })
 
+describe('Argument stack', () => {
+  describe('push', () => {
+  })
+})
+
 
 describe('Memory access', () => {
   describe('float', () => {
     test('new t = ram[t] float', () => {
-      gsx.ram.setFloat32(2, -8.58)
       gsx.registers.t = 2
+      gsx.ram.setFloat32(2, -8.58)
 
       const [bytecode] = translateToBytecode('new t = ram[t] float')
       gsx.runProgram(bytecode)
@@ -45,8 +50,8 @@ describe('Memory access', () => {
     })
 
     test('new t = ram[r] float', () => {
-      gsx.ram.setFloat32(4, 123456.78)
       gsx.registers.r = 4
+      gsx.ram.setFloat32(4, 123456.78)
 
       const [bytecode] = translateToBytecode('new t = ram[r] float')
       gsx.runProgram(bytecode)
@@ -56,8 +61,8 @@ describe('Memory access', () => {
     })
 
     test('new t = ram[y] float', () => {
-      gsx.ram.setFloat32(13, -0.005)
       gsx.registers.y = 13
+      gsx.ram.setFloat32(13, -0.005)
 
       const [bytecode] = translateToBytecode('new t = ram[y] float')
       gsx.runProgram(bytecode)
@@ -68,8 +73,8 @@ describe('Memory access', () => {
 
 
     test('new y = ram[r] float', () => {
-      gsx.ram.setFloat32(13, -3.003)
       gsx.registers.r = 13
+      gsx.ram.setFloat32(13, -3.003)
 
       const [bytecode] = translateToBytecode('new y = ram[r] float')
       gsx.runProgram(bytecode)
@@ -81,8 +86,8 @@ describe('Memory access', () => {
 
   describe('byte', () => {
     test('new t = ram[t] byte', () => {
-      gsx.ram.setInt8(2, -8)
       gsx.registers.t = 2
+      gsx.ram.setInt8(2, -8)
 
       const [bytecode] = translateToBytecode('new t = ram[t] byte')
       gsx.runProgram(bytecode)
@@ -92,8 +97,8 @@ describe('Memory access', () => {
     })
 
     test('new t = ram[r] byte', () => {
-      gsx.ram.setInt8(4, 120)
       gsx.registers.r = 4
+      gsx.ram.setInt8(4, 120)
 
       const [bytecode] = translateToBytecode('new t = ram[r] byte')
       gsx.runProgram(bytecode)
@@ -103,8 +108,8 @@ describe('Memory access', () => {
     })
 
     test('new t = ram[y] byte', () => {
-      gsx.ram.setInt8(13, -100)
       gsx.registers.y = 13
+      gsx.ram.setInt8(13, -100)
 
       const [bytecode] = translateToBytecode('new t = ram[y] byte')
       gsx.runProgram(bytecode)
@@ -114,8 +119,8 @@ describe('Memory access', () => {
     })
 
     test('new r = ram[t] byte', () => {
-      gsx.ram.setInt8(13, -101)
       gsx.registers.t = 13
+      gsx.ram.setInt8(13, -101)
 
       const [bytecode] = translateToBytecode('new r = ram[t] byte')
       gsx.runProgram(bytecode)
@@ -126,12 +131,16 @@ describe('Memory access', () => {
   })
 })
 
-describe('Math', () => {
+describe('Instructions only involving general purpose registers', () => {
   test.each([
     // Assign zero to register
     ['new t = 0', [8, 5, 3], [0, 5, 3]],
     ['new r = 0', [8, 5, 3], [8, 0, 3]],
     ['new y = 0', [8, 5, 3], [8, 5, 0]],
+
+    ['new t = 0.0', [8, 5, 3], [0, 5, 3]],
+    ['new r = 0.0', [8, 5, 3], [8, 0, 3]],
+    ['new y = 0.0', [8, 5, 3], [8, 5, 0]],
 
 
     // Addition

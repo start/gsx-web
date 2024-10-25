@@ -14,15 +14,15 @@ import {getFloatBytes} from '../helpers/getFloatBytes.ts'
 
   No real parsing is necessary!
 
-  Of our 256 instructions, 250 are keyable. Keyable instructions
-  include the following:
+  Of our 256 mnemonics, 250 are keyable. Keyable mnemonics include
+  the following:
 
     exit
     push t
     new t = r - y
     call y
 
-  In contrast ,the six non-keyable mnemonics are described in a
+  In contrast, the six non-keyable mnemonics are described in a
   large comment later in this file. All six involve assigning an
   arbitrary numeric constant to a register, and all six produce
   more than a single byte of bytecode.

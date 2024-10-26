@@ -1,4 +1,4 @@
-import {toFloat32, toUint8, toInt32} from './TypeCasting.ts'
+import {toFloat32, toUint8, toUint32} from './TypeCasting.ts'
 
 
 export type GeneralPurposeRegisterName = 't' | 'r' | 'y'
@@ -13,7 +13,7 @@ export class Registers {
   }
 
   set programCounter(value: number) {
-    this._programCounter = toInt32(value)
+    this._programCounter = toUint32(value)
   }
 
   // 8-bit unsigned integer

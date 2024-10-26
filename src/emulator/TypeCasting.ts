@@ -5,7 +5,7 @@ export function toUint8(value: number): number {
   return integerSaturate(value, 0, UINT8_MAX)
 }
 
-export function toInt32(value: number): number {
+export function toUint32(value: number): number {
   return integerSaturate(value, 0, UINT32_MAX)
 }
 

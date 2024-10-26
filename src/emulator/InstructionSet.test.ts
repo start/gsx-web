@@ -133,14 +133,16 @@ describe('Memory access', () => {
 
 describe('Instructions only involving general purpose registers', () => {
   test.each([
-    // Assign zero to register
+    // Assign byte constant to register
     ['new t = 0', [8, 5, 3], [0, 5, 3]],
-    ['new r = 0', [8, 5, 3], [8, 0, 3]],
-    ['new y = 0', [8, 5, 3], [8, 5, 0]],
+    ['new r = -128', [8, 5, 3], [8, -128, 3]],
+    ['new y = 127', [8, 5, 3], [8, 5, 127]],
+    ['new t = 24.00', [8, 5, 3], [24, 5, 3]],
 
-    ['new t = 0.0', [8, 5, 3], [0, 5, 3]],
-    ['new r = 0.0', [8, 5, 3], [8, 0, 3]],
-    ['new y = 0.0', [8, 5, 3], [8, 5, 0]],
+    // Assign float constant to register
+    ['new t = 0.12', [8, 5, 3], [0.12, 5, 3]],
+    ['new r = 129', [8, 5, 3], [8, 129, 3]],
+    ['new y = 10000.5', [8, 5, 3], [8, 5, 10000.5]],
 
 
     // Addition

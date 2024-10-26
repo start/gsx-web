@@ -26,10 +26,6 @@ import {getFloatBytes} from '../helpers/getFloatBytes.ts'
   large comment later in this file. All six involve assigning an
   arbitrary numeric constant to a register, and all six produce
   more than a single byte of bytecode.
-
-  (We have specific, single-byte mnemonics for assigning 0 to a
-  register. However, all other constant assignments must use the
-  non-keyable six mnemonics.)
 */
 const bytecodeByKeyableMnemonic: Record<string, number | undefined> = {}
 
@@ -98,15 +94,15 @@ export function translateToBytecode(program: string): [DataView, string[]] {
       continue
     }
 
-    const bytecodeForAssigningConstantToRegister =
-      tryToGetBytecodeForAssigningConstantToRegister(normalizedMnemonic)
+    const bytecodeForConstantAssignment =
+      tryToGetBytecodeForConstantAssignment(normalizedMnemonic)
 
-    if (bytecodeForAssigningConstantToRegister === null) {
+    if (bytecodeForConstantAssignment === null) {
       syntaxErrors.push(`Unknown instruction (${line}) on line ${(lineIndex + 1).toLocaleString()}.`)
       continue
     }
 
-    programBytes.push(...bytecodeForAssigningConstantToRegister)
+    programBytes.push(...bytecodeForConstantAssignment)
   }
 
   const bytecode = new DataView(new Uint8Array(
@@ -114,46 +110,6 @@ export function translateToBytecode(program: string): [DataView, string[]] {
   ).buffer)
 
   return [bytecode, syntaxErrors]
-}
-
-
-function tryToGetBytecodeForAssigningConstantToRegister(normalizedMnemonic: string): number[] | null {
-  const PATTERN_FOR_ASSIGNING_CONSTANT_TO_REGISTER =
-    /^new([try])=(-?\d+(?:\.\d+)?)$/
-
-  const captures =
-    normalizedMnemonic.match(PATTERN_FOR_ASSIGNING_CONSTANT_TO_REGISTER)
-
-  if (!captures) {
-    return null
-  }
-
-  const [, register, constantAsString] = captures
-  const constant = parseFloat(constantAsString)
-
-  const isConstantAByte =
-    (constant >= INT8_MIN) && (constant <= INT8_MAX) &&
-    constant === parseInt(constantAsString, 10)
-
-  if (isConstantAByte) {
-    switch (register as GeneralPurposeRegisterName) {
-      case 't':
-        return [0, constant]
-      case 'r':
-        return [1, constant]
-      case 'y':
-        return [2, constant]
-    }
-  } else {
-    switch (register as GeneralPurposeRegisterName) {
-      case 't':
-        return [3, ...getFloatBytes(constant)]
-      case 'r':
-        return [4, ...getFloatBytes(constant)]
-      case 'y':
-        return [5, ...getFloatBytes(constant)]
-    }
-  }
 }
 
 
@@ -250,6 +206,51 @@ for (const register of generalPurposeRegisters) {
     })
 }
 
+function tryToGetBytecodeForConstantAssignment(normalizedMnemonic: string): number[] | null {
+  const PATTERN_FOR_ASSIGNING_CONSTANT_TO_REGISTER =
+    /^new([try])=(-?\d+(?:\.\d+)?)$/
+
+  const captures =
+    normalizedMnemonic.match(PATTERN_FOR_ASSIGNING_CONSTANT_TO_REGISTER)
+
+  if (!captures) {
+    return null
+  }
+
+  const [, register, constantAsString] = captures
+  const constant = parseFloat(constantAsString)
+
+  const isConstantAByte =
+    (constant >= INT8_MIN) && (constant <= INT8_MAX) &&
+    constant === parseInt(constantAsString, 10)
+
+  if (isConstantAByte) {
+    // If the constant is a byte, this instruction takes two bytes:
+    // - One byte for the instruction itself
+    // - One byte for the constant
+    switch (register as GeneralPurposeRegisterName) {
+      case 't':
+        return [BytecodeForConstantAssignment.ByteToRegisterT, constant]
+      case 'r':
+        return [BytecodeForConstantAssignment.ByteToRegisterR, constant]
+      case 'y':
+        return [BytecodeForConstantAssignment.ByteToRegisterY, constant]
+    }
+  } else {
+    // If the constant is a float, this instruction takes five bytes:
+    // - One byte for the instruction itself
+    // - Four bytes for the constant
+    switch (register as GeneralPurposeRegisterName) {
+      case 't':
+        return [BytecodeForConstantAssignment.FloatToRegisterT, ...getFloatBytes(constant)]
+      case 'r':
+        return [BytecodeForConstantAssignment.FloatToRegisterR, ...getFloatBytes(constant)]
+      case 'y':
+        return [BytecodeForConstantAssignment.FloatToRegisterY, ...getFloatBytes(constant)]
+    }
+  }
+}
+
 
 // The rest of our instructions have "keyable" mnemonics, and they
 // all produce just a single byte of bytecode.
@@ -273,9 +274,12 @@ function define(mnemonicOrMnemonics: string | string[], instruction: Instruction
   const bytecode = instructionByBytecode.length
 
   for (const mnemonic of normalizedMnemonics) {
+    // Associate each mnemonic with the instruction's bytecode.
     bytecodeByKeyableMnemonic[mnemonic] = bytecode
   }
 
+  // Finally, associate the bytecode with the instruction itself.
+  // (Remember
   instructionByBytecode.push(instruction)
 }
 
@@ -284,8 +288,17 @@ define('exit',
   (gsx: Gsx) => {
     if (gsx.registers.jumpStackPointer === 0) {
       // If we made it here, we're invoking `exit` outside a function.
-      // We need to end the program!
-      gsx.registers.programCounter = PROGRAM_COUNTER_EXIT
+      // We need to end the program! But how?
+      //
+      // Well, if the program counter ever becomes greater than the
+      // program's size in bytes, GSX knows the program is finished,
+      // and it stops execution.
+      //
+      // Thus, to indicate our program should exit, we set the program
+      // counter to `UINT32_MAX`, which is dramatically larger than the
+      // maximum allowed program size. (Plus, it's the largest value we
+      // can store in the 32-bit program counter register.)
+      gsx.registers.programCounter = UINT32_MAX
     } else {
       gsx.registers.jumpStackPointer -= 1
       gsx.registers.programCounter = gsx.jumpStack[gsx.registers.jumpStackPointer]
@@ -324,17 +337,6 @@ for (const register of generalPurposeRegisters) {
         register,
         gsx.argumentStack[gsx.registers.argumentStackPointer])
     })
-}
-
-// Set a register equal to zero.
-for (const register of generalPurposeRegisters) {
-  define([
-    assign({to: register, from: '0'}),
-    assign({to: register, from: '0.0'})
-  ], (gsx: Gsx) => {
-    gsx.registers.set(register, 0)
-  })
-
 }
 
 
@@ -603,13 +605,11 @@ function normalizeMnemonic(mnemonic: string): string {
     .toLowerCase()
 }
 
-
-// If the program counter ever becomes greater than the program's
-// size in bytes, GSX knows the program is finished, and it stops
-// execution.
-//
-// To specifically indicate our program should exit, we set the
-// program counter to `UINT32_MAX`, which is dramatically larger
-// than the maximum allowed program size. (Plus, it's the largest
-// value we can store in the 32-bit program counter register.)
-const PROGRAM_COUNTER_EXIT = UINT32_MAX
+enum BytecodeForConstantAssignment {
+  ByteToRegisterT,
+  ByteToRegisterR,
+  ByteToRegisterY,
+  FloatToRegisterT,
+  FloatToRegisterR,
+  FloatToRegisterY
+}
